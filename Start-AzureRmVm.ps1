@@ -23,7 +23,7 @@
 
 .PARAMETER VMName
     Optional
-    Allows you to specify a single VM to start. The resource group name will be required.
+    Allows you to specify a list of VM to start. The resource group name will be required.
 
 .PARAMETER VMsExceptionList
     Optional
@@ -123,8 +123,12 @@ $ResourceGroupName = $ResourceGroupName -replace '\s',''
 # otherwise get all VMs in the subscription.
 if ($ResourceGroupName) { 
     if ($VMName) {
+        $VMName = $VMName -replace '\s',''
+        $AzureVMsName = $VMName.Split(",") 
         $VMs = @()
-        $VMs += Get-AzureRmVM -ResourceGroupName $ResourceGroupName -Name $VMName
+        Foreach ($VM in $AzureVMsName) {
+            $VMs += Get-AzureRmVM -ResourceGroupName $ResourceGroupName -Name $VM
+        }        
     }
     else {
 	    [System.Collections.ArrayList]$VMs = Get-AzureRmVM -ResourceGroupName $ResourceGroupName
