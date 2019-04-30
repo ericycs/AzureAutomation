@@ -22,10 +22,10 @@
     Allows you to specify a single VM to start. The resource group name will be required.
 
 .NOTES
-	Created By: Eric Yew - OLIKKA
-	LAST EDIT: Apr 30, 2019
-	By: Eric Yew
-	SOURCE: https://github.com/ericyew/AzureAutomation/blob/master/Apply-TagsFromRG.ps1
+    Created By: Eric Yew - OLIKKA
+    LAST EDIT: Apr 30, 2019
+    By: Eric Yew
+    SOURCE: https://github.com/ericyew/AzureAutomation/blob/master/Apply-TagsFromRG.ps1
 #>
 
 # Returns strings with status messages
