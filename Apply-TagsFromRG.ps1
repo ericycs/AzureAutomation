@@ -12,15 +12,6 @@
    
    To reduce error, create automation account variables called "Prod Subscription Name" and "DevTest Subscription Name"
 
-.PARAMETER ResourceGroupName
-   Mandatory
-   Allows you to specify the resource group containing the VMs to start.  
-   If this parameter is included, only VMs in the specified resource group will be stopped, otherwise all VMs in the subscription will be stopped.  
-
-.PARAMETER VMName
-    Mandatory
-    Allows you to specify a single VM to start. The resource group name will be required.
-
 .NOTES
     Created By: Eric Yew - OLIKKA
     LAST EDIT: Apr 30, 2019
