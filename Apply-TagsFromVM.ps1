@@ -106,6 +106,11 @@ $VMs = Get-AzureRmVM
 #For each VM resources, apply the Tag of the VM
 Foreach ($vm in $VMs)
 {
+    $nicID = $null
+    $osDisk = $null
+    $dataDiskID = $null
+    $Tags = $null
+
     If($vm.Tags){
         $VmRgName = $vm.Resourcegroupname
         $Tags = $vm.Tags
@@ -116,20 +121,22 @@ Foreach ($vm in $VMs)
 
         $osDisk = Get-AzureRmDisk -DiskName $vm.StorageProfile.OsDisk.Name -ResourceGroupName $VmRgName
         $osDiskID = $osDisk.Id
+        
+        If($osDisk){
+            write-output "Applying Tags to $osDiskID"
+            $SetTag = Set-AzureRmResource -ResourceId $osDiskID -Tag $Tags -Force
 
-        write-output "Applying Tags to $osDiskID"
-        $SetTag = Set-AzureRmResource -ResourceId $osDiskID -Tag $Tags -Force
-
-        If ($vm.datadisks) {
-            Foreach($dataDisk in $vm.datadisks) {
-                $dataDiskInfo = Get-AzureRmDisk -DiskName $dataDisk.name -ResourceGroupName $VmRgName
-                $dataDiskID = $dataDiskInfo.Id
-                write-output "Applying Tags to $dataDiskID"
-                $SetTag = Set-AzureRmResource -ResourceId $dataDiskID -Tag $Tags -Force
+            If ($vm.datadisks) {
+                Foreach($dataDisk in $vm.datadisks) {
+                    $dataDiskInfo = Get-AzureRmDisk -DiskName $dataDisk.name -ResourceGroupName $VmRgName
+                    $dataDiskID = $dataDiskInfo.Id
+                    write-output "Applying Tags to $dataDiskID"
+                    $SetTag = Set-AzureRmResource -ResourceId $dataDiskID -Tag $Tags -Force
+                }
             }
-        }     
+         }     
     }
     Else{
         Write-Output "$vm.name not Tagged!"
-    }  
+    }
 }
