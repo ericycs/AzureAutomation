@@ -10,15 +10,12 @@
 	- Recreate the virtual machine with the new name, existing vhd and nic
 	- Starts the specified virtual machine
   
-.PARAMETER AzureCredentialAssetName
-   Optional with default of "AzureCredential".
-   The name of an Automation credential asset that contains the Azure AD user credential with authorization for this subscription. 
-   To use an asset with a different name you can pass the asset name as a runbook input parameter or change the default value for the input parameter.
-
-.PARAMETER AzureSubscriptionName  
-   Optional with default of "SGG-Infrastructure-Prod-SCE".  
-   The name of An Automation variable asset that contains the GUID for this Azure subscription.  
-   To use an asset with a different name you can pass the asset name as a runbook input parameter or change the default value for the input parameter.  
+.PARAMETER AzureSubscriptionName
+   Optional with default of "1-Prod".
+   The name of an Azure Subscription stored in Automation Variables. To use an subscription with a different name you can pass the subscription name as a runbook input parameter or change
+   the default value for this input parameter.
+   
+   To reduce error, create automation account variables called "Prod Subscription Name" and "DevTest Subscription Name"
 
 .PARAMETER VMName
    Mandatory with no default.
@@ -36,13 +33,15 @@
    
 .NOTES
  	Created By: Eric Yew
-	LAST EDIT: July 7, 2016
+	LAST EDIT: May 2, 2019
 	By: Eric Yew
+    SOURCE: https://github.com/ericyew/AzureAutomation/blob/master/Rename-AzureRmVm.ps1
 #>
+
 
 param (
     [Parameter(Mandatory=$false)] 
-    [String] $AzureSubscriptionName = 'SGG-Infrastructure-Prod-SCE',
+    [String] $AzureSubscriptionName = "1-Prod, 2-Dev/Test *Defaults to Prod*",
 
     [parameter(Mandatory=$true)] 
     [String] $VMName,
@@ -54,34 +53,102 @@ param (
     [String] $ResourceGroupName	
 ) 
 
-#Error Checking: Trim white space from both ends of string enter.
+# Enable Verbose logging for testing
+#    $VerbosePreference = "Continue"
+
+# Error Checking: Trim white space from both ends of string enter.
 $VMName = $VMName -replace '\s',''
-$AzureSubscriptionName = $AzureSubscriptionName -replace '\s',''
+$AzureSubscriptionName = $AzureSubscriptionName.trim()	
 $NewVMName = $NewVMName -replace '\s',''
 $ResourceGroupName = $ResourceGroupName -replace '\s',''
 
-# Getting automation assets
-$AzureCred = Get-AutomationPSCredential -Name 'PSAdmin' -ErrorAction Stop
+# Retrieve subscription name from variable asset if not specified
+    if($AzureSubscriptionName -eq "1" -Or $AzureSubscriptionName -eq "1-Prod, 2-Dev/Test *Defaults to Prod*")
+    {
+        $AzureSubscriptionName = Get-AutomationVariable -Name 'Prod Subscription Name'
+        if($AzureSubscriptionName.length -gt 0)
+        {
+            Write-Output "Specified subscription name/ID: [$AzureSubscriptionName]"
+        }
+        else
+        {
+            throw "No variable asset with name 'Prod Subscription Name' was found. Either specify an Azure subscription name or define the 'Prod Subscription Name' variable setting"
+        }
+    }
+    elseIf($AzureSubscriptionName -eq "2")
+    {
+        $AzureSubscriptionName = Get-AutomationVariable -Name 'DevTest Subscription Name'
+        if($AzureSubscriptionName.length -gt 0)
+        {
+            Write-Output "Specified subscription name/ID: [$AzureSubscriptionName]"
+        }
+        else
+        {
+            throw "No variable asset with name 'DevTest Subscription Name' was found. Either specify an Azure subscription name or define the 'DevTest Subscription Name' variable setting"
+        }
+    }
+    else
+    {
+        if($AzureSubscriptionName.length -gt 0)
+        {
+            Write-Output "Specified subscription name/ID: [$AzureSubscriptionName]"
+        }
+        else
+        {
+            throw "No variable asset or subscription with name $AzureSubscriptionName was found. Either specify an Azure subscription name or specify 1,2 or 3 options"
+        }
+    }
 
-# Connecting to Azure
-$null = Add-AzureRmAccount -Credential $AzureCred -SubscriptionName $AzureSubscriptionName -ErrorAction Stop
+#Connect to Azure
+    try
+    {
+        # Get the connection "AzureRunAsConnection "
+        $servicePrincipalConnection=Get-AutomationConnection -Name AzureRunAsConnection         
 
-# Getting the virtual machine
-$VM = Get-AzureRmVM -ResourceGroupName $ResourceGroupName -Name $VMName -ErrorAction Stop
-$VMConfig = $VM
+        "Logging in to Azure..."
+        Connect-AzureRmAccount `
+            -ServicePrincipal `
+            -TenantId $servicePrincipalConnection.TenantId `
+            -ApplicationId $servicePrincipalConnection.ApplicationId `
+            -CertificateThumbprint $servicePrincipalConnection.CertificateThumbprint 
+    }
+    catch {
+        if (!$servicePrincipalConnection)
+        {
+            $ErrorMessage = "Connection AzureRunAsConnection not found."
+            throw $ErrorMessage
+        } else{
+            Write-Error -Message $_.Exception
+            throw $_.Exception
+        }
+    }
+    Select-AzureRmSubscription -SubscriptionName $AzureSubscriptionName
 
-"Shutting down the virtual machine ..."
-$RmPState = (Get-AzureRmVM -ResourceGroupName $ResourceGroupName -Name $VMName -Status -ErrorAction SilentlyContinue -WarningAction SilentlyContinue).Statuses.Code[1]
 
-if ($RmPState -eq 'PowerState/deallocated')
-{
-    "$VMName is already shut down."
-}
-else
-{
-    $StopSts = $VM | Stop-AzureRmVM -Force -ErrorAction Stop
-    "The virtual machine has been stopped."
-}
+# Getting the virtual machine config
+    $VM = Get-AzureRmVM -ResourceGroupName $ResourceGroupName -Name $VMName -ErrorAction Stop
+    $VMConfig = $VM
+
+#Runbook will not run on SQL Server IaaS VM deployed from marketplace
+    If (Get-AzureRmVMSqlServerExtension -ResourceGroupName $ResourceGroupName -VMName $VMName){
+        Write-Output "VM is a SQL VM. It is not recommended to perform this action on a SQL VM"
+        Write-Output "Exiting runbook"
+        Exit
+    }
+
+#Shutdown the VM
+    "Shutting down the virtual machine ..."
+    $RmPState = (Get-AzureRmVM -ResourceGroupName $ResourceGroupName -Name $VMName -Status -ErrorAction SilentlyContinue -WarningAction SilentlyContinue).Statuses.Code[1]
+
+    if ($RmPState -eq 'PowerState/deallocated')
+    {
+        "$VMName is already shut down."
+    }
+    else
+    {
+        $StopSts = $VM | Stop-AzureRmVM -Force -ErrorAction Stop
+        "The virtual machine has been stopped."
+    }
 
 #Reconfigure and Clean-up VM config to reflect deployment from attached disks
 	$VM.Name = $NewVMName
@@ -93,9 +160,9 @@ else
     $vm.OSProfile = $null
 
 #Remove the virtual machine from Azure
-Remove-AzureRmVM -VMName $VMName -ResourceGroupName $ResourceGroupName -Force -ErrorAction Stop
+    Remove-AzureRmVM -VMName $VMName -ResourceGroupName $ResourceGroupName -Force -ErrorAction Stop
 
 #Recreate the virtual machine with the new name
-New-AzureRmVM -ResourceGroupName $ResourceGroupName -Location $VM.Location -VM $VM -Verbose
+    New-AzureRmVM -ResourceGroupName $ResourceGroupName -Location $VM.Location -VM $VM -Verbose
 
 "The virtual machine has been renamed and started."

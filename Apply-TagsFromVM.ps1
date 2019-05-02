@@ -5,7 +5,7 @@
 .DESCRIPTION
   This runbooks check resources for tags on VM. If tags does exist, it ensure nic and disk resources are tagged with the same tags.
 
-.PARAMETER SubscriptionName
+.PARAMETER AzureSubscriptionName
    Optional with default of "1-Prod".
    The name of an Azure Subscription stored in Automation Variables. To use an subscription with a different name you can pass the subscription name as a runbook input parameter or change
    the default value for this input parameter.
@@ -111,7 +111,7 @@ Foreach ($vm in $VMs)
     $dataDiskID = $null
     $Tags = $null
 
-    If($vm.Tags){
+    If($vm.Tags.Count -ne 0){
         $VmRgName = $vm.Resourcegroupname
         $Tags = $vm.Tags
         $nicID = $vm.NetworkProfile.NetworkInterfaces.Id
@@ -119,10 +119,11 @@ Foreach ($vm in $VMs)
         write-output "Applying Tags to $nicID"
         $SetTag = Set-AzureRmResource -ResourceId $nicID -Tag $Tags -Force
 
-        $osDisk = Get-AzureRmDisk -DiskName $vm.StorageProfile.OsDisk.Name -ResourceGroupName $VmRgName
-        $osDiskID = $osDisk.Id
+        #Check for managed disk
+        If($vm.StorageProfile.OsDisk.managedDisk){
+            $osDisk = Get-AzureRmDisk -DiskName $vm.StorageProfile.OsDisk.Name -ResourceGroupName $VmRgName
+            $osDiskID = $osDisk.Id
         
-        If($osDisk){
             write-output "Applying Tags to $osDiskID"
             $SetTag = Set-AzureRmResource -ResourceId $osDiskID -Tag $Tags -Force
 
@@ -134,9 +135,10 @@ Foreach ($vm in $VMs)
                     $SetTag = Set-AzureRmResource -ResourceId $dataDiskID -Tag $Tags -Force
                 }
             }
-         }     
+        }     
     }
     Else{
-        Write-Output "$vm.name not Tagged!"
+        $vmName = $vm.name
+        Write-Output "$vmName not Tagged!"
     }
 }

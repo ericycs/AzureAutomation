@@ -11,10 +11,12 @@
 	- Recreate the virtual machine with existing name, existing vhd, existing nic and new/existing availability set.
 	- Starts the specified virtual machine
   
-.PARAMETER AzureSubscriptionName  
-   Optional with default of "WCC Production EA".  
-   The name of An Automation variable asset that contains the GUID for this Azure subscription.  
-   To use an asset with a different name you can pass the asset name as a runbook input parameter or change the default value for the input parameter.  
+.PARAMETER AzureSubscriptionName
+   Optional with default of "1-Prod".
+   The name of an Azure Subscription stored in Automation Variables. To use an subscription with a different name you can pass the subscription name as a runbook input parameter or change
+   the default value for this input parameter.
+   
+   To reduce error, create automation account variables called "Prod Subscription Name" and "DevTest Subscription Name"
 
 .PARAMETER VMName
    Mandatory with no default.
@@ -37,9 +39,9 @@
    
 .NOTES
 	Created By: Eric Yew - OLIKKA
-	LAST EDIT: May 1, 2018
+	LAST EDIT: Apr 30, 2019
 	By: Eric Yew
-	SOURCE: https://github.com/ericyew/AzureAutomation/blob/master/Set-AvailabilitySet.ps1
+	SOURCE: https://github.com/ericyew/AzureAutomation/blob/master/ChangeAdd-AvailabilitySet.ps1
 #>
 
 param (
@@ -139,6 +141,13 @@ $CreateNewAvailabilitySet = $CreateNewAvailabilitySet.trim()
 
 # Getting the virtual machine
     $VM = Get-AzureRmVM -ResourceGroupName $ResourceGroupName -Name $VMName -ErrorAction Stop
+
+    #Runbook will not run on SQL Server IaaS VM deployed from marketplace
+        If (Get-AzureRmVMSqlServerExtension -ResourceGroupName $ResourceGroupName -VMName $VMName){
+            Write-Output "VM is a SQL VM. It is not recommended to perform this action on a SQL VM"
+            Write-Output "Exiting runbook"
+            Exit
+        }
     $VMConfig = $VM
     $location = $vm.location
 
@@ -175,7 +184,7 @@ ElseIf ($CreateNewAvailabilitySet -eq 'Remove' -Or $CreateNewAvailabilitySet -eq
 Else {
 	Write-Output $CreateNewAvailabilitySet
 	$ErrorActionPreference = "Stop"
-	Write-Error –Message "Runbook stopped as CreateNewAvailabilitySet should be Yes or No"	
+	Write-Error -Message "Runbook stopped as CreateNewAvailabilitySet should be Yes or No"	
 }
 
 "Shutting down the virtual machine ..."
